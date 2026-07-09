@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#c0392b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pyrolysis Monitor">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Smart Pyrolysis Monitoring System</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --red: #c0392b;
+    --red-dark: #a93226;
+    --bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --text-dark: #1f2937;
+    --text-muted: #6b7280;
+    --green: #16a34a;
+    --green-bg: #e8f8ee;
+    --yellow: #b45309;
+    --yellow-bg: #fef3c7;
+    --danger: #dc2626;
+    --danger-bg: #fde2e1;
+    --border: #e5e7eb;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text-dark);
+    padding-bottom: 40px;
+  }
+
+  header.topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 16px 24px;
+  }
+
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand img{ width:38px; height:38px; }
+  .brand h1{ font-size:18px; margin:0; }
+  .brand p{ font-size:12px; margin:0; color:var(--text-muted); }
+
+  #globalStatus{
+    padding:6px 14px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+  }
+  .status-online{ background:var(--green-bg); color:var(--green); }
+  .status-offline{ background:var(--danger-bg); color:var(--danger); }
+
+  .hero{
+    margin: 0 24px 20px 24px;
+    background: linear-gradient(135deg, var(--red), var(--red-dark));
+    border-radius: 18px;
+    padding: 40px 20px;
+    text-align:center;
+    color:#fff;
+  }
+  .hero img{ width:56px; height:56px; margin-bottom:10px; }
+  .hero h2{ margin:0 0 6px 0; font-size:26px; }
+  .hero p{ margin:0; opacity:.9; font-size:14px; }
+  .hero .clock{ margin-top:6px; font-size:13px; opacity:.85; }
+
+  .tabs{
+    display:flex;
+    gap:12px;
+    margin: 0 24px 20px 24px;
+    flex-wrap:wrap;
+  }
+  .tab{
+    flex:1 1 120px;
+    background:var(--card-bg);
+    border:2px solid var(--border);
+    border-radius:12px;
+    padding:12px 14px;
+    text-align:center;
+    cursor:pointer;
+    transition:.15s;
+  }
+  .tab:hover{ border-color:#d1d5db; }
+  .tab.active{ border-color:var(--red); }
+  .tab .name{ font-weight:600; font-size:14px; }
+  .tab .dot-row{ font-size:12px; margin-top:4px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; gap:5px; }
+  .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .dot.online{ background:var(--green); }
+  .dot.offline{ background:var(--danger); }
+
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap:16px;
+    margin: 0 24px;
+  }
+
+  .card{
+    background:var(--card-bg);
+    border-radius:14px;
+    padding:20px;
+    border:1px solid var(--border);
+  }
+  .card .label{ font-size:14px; color:var(--text-muted); margin-bottom:8px; }
+  .card .value{ font-size:34px; font-weight:700; line-height:1; }
+  .card .unit{ font-size:13px; color:var(--text-muted); margin:6px 0 12px 0; }
+  .badge{
+    display:inline-block;
+    font-size:12px;
+    font-weight:700;
+    padding:4px 10px;
+    border-radius:8px;
+  }
+  .badge.normal{ background:var(--green-bg); color:var(--green); }
+  .badge.warning{ background:var(--yellow-bg); color:var(--yellow); }
+  .badge.danger{ background:var(--danger-bg); color:var(--danger); }
+
+  .suhu .value{ color:#ea580c; }
+  .kelembapan .value{ color:#2563eb; }
+  .gas .value{ color:#16a34a; }
+
+  .lastupdate{
+    margin:16px 24px 0 24px;
+    font-size:12px;
+    color:var(--text-muted);
+    text-align:right;
+  }
+
+  .overall-status{
+    margin: 0 24px 16px 24px;
+    border-radius:14px;
+    padding:18px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-weight:700;
+    border:1px solid var(--border);
+  }
+  .overall-status .title{ font-size:13px; font-weight:600; opacity:.85; margin-bottom:2px; }
+  .overall-status .label{ font-size:20px; }
+  .overall-status.st-normal{ background:var(--green-bg); color:var(--green); }
+  .overall-status.st-warning{ background:var(--yellow-bg); color:var(--yellow); }
+  .overall-status.st-danger{ background:var(--danger-bg); color:var(--danger); }
+
+  .charts-section{
+    margin: 24px 24px 0 24px;
+  }
+  .charts-section h3{
+    font-size:15px;
+    color:var(--text-muted);
+    margin: 0 0 12px 2px;
+    font-weight:600;
+  }
+  .charts-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap:16px;
+  }
+  .chart-card{
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+  }
+  .chart-card .chart-label{
+    font-size:13px;
+    color:var(--text-muted);
+    margin-bottom:10px;
+    font-weight:600;
+  }
+  .chart-card canvas{
+    max-height:180px;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img src="https://cdn-icons-png.flaticon.com/512/2913/2913464.png" alt="logo">
+    <div>
+      <h1>Smart Pyrolysis Monitoring</h1>
+      <p>Smart Monitoring Platform</p>
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <button id="installBtn" style="display:none; background:var(--red); color:#fff; border:none; padding:6px 12px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer;">⬇ Install App</button>
+    <div id="globalStatus" class="status-offline">● Offline</div>
+  </div>
+</header>
+
+<div class="hero">
+  <img src="https://cdn-icons-png.flaticon.com/512/2913/2913464.png" alt="logo">
+  <h2>Smart Pyrolysis Monitoring System</h2>
+  <p>Monitoring Suhu, Kelembapan &amp; Kualitas Udara Alat Pirolisis</p>
+  <div class="clock" id="clock">--:--:--</div>
+</div>
+
+<div class="tabs" id="unitTabs"></div>
+
+<div class="overall-status st-normal" id="overallStatus">
+  <div>
+    <div class="title">Status Keseluruhan Alat</div>
+    <div class="label" id="overallStatusLabel">BAIK</div>
+  </div>
+  <div style="font-size:28px;" id="overallStatusIcon">✅</div>
+</div>
+
+<div class="grid" id="sensorGrid"></div>
+
+<div class="lastupdate" id="lastUpdate">Belum ada data</div>
+
+<div class="charts-section">
+  <h3>Grafik Realtime</h3>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-label">Suhu (°C)</div>
+      <canvas id="chartSuhu"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-label">Kelembapan (%RH)</div>
+      <canvas id="chartKelembapan"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-label">Gas MQ135 (ppm)</div>
+      <canvas id="chartGas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ======================================================
+   1. KONFIGURASI - HARUS SESUAI DENGAN KODE ESP32
+   ====================================================== */
+
+// Broker MQTT via WebSocket (untuk browser). Ini adalah broker publik HiveMQ,
+// dipakai broker YANG SAMA dengan yang dipakai ESP32 (bedanya hanya port/protokol:
+// ESP32 pakai MQTT biasa port 1883, browser pakai MQTT-over-WebSocket port 8884).
+const MQTT_BROKER_URL = "wss://broker.hivemq.com:8884/mqtt";
+
+const MQTT_OPTIONS = {
+  clientId: "pyrolysis_dashboard_" + Math.random().toString(16).substring(2, 8),
+  reconnectPeriod: 3000,
+};
+
+// HARUS SAMA PERSIS dengan TOPIC_PREFIX di kode ESP32 (pyrolysis_monitor.ino)
+const TOPIC_PREFIX = "pyrolysis";
+
+// Kalau baru punya 1 alat, biarkan array ini isi [1] saja.
+// Kalau nanti nambah alat, tinggal tambah angkanya, misal [1,2,3].
+const UNIT_IDS = [1];
+
+const UNITS = UNIT_IDS.map(n => ({
+  id: n,
+  name: `Unit Pirolisis ${n}`,
+  topics: {
+    suhu: `${TOPIC_PREFIX}/unit${n}/suhu`,
+    kelembapan: `${TOPIC_PREFIX}/unit${n}/kelembapan`,
+    gas: `${TOPIC_PREFIX}/unit${n}/gas`,
+    status: `${TOPIC_PREFIX}/unit${n}/status`,
+  },
+  data: { suhu: 0, kelembapan: 0, gas: 0 },
+  online: false,
+  lastSeen: 0,
+  history: {
+    suhu: { labels: [], values: [] },
+    kelembapan: { labels: [], values: [] },
+    gas: { labels: [], values: [] },
+  },
+}));
+
+// Berapa banyak titik data yang disimpan di grafik (data lebih lama otomatis dibuang)
+const MAX_HISTORY_POINTS = 20;
+
+// Kalau tidak ada topic status terpisah, unit dianggap offline
+// jika tidak ada data masuk sama sekali selama sekian ms:
+const OFFLINE_TIMEOUT_MS = 15000;
+
+// Ambang batas - SESUAIKAN dengan kondisi aman proses pirolisis Anda
+const THRESHOLDS = {
+  suhu:       { warning: 60,   danger: 90   },   // derajat Celsius
+  kelembapan: { warning: 80,   danger: 95   },   // %RH
+  gas:        { warning: 200,  danger: 500  },   // ppm (estimasi MQ135)
+};
+
+/* ======================================================
+   2. STATE & RENDER
+   ====================================================== */
+
+let activeUnitId = UNIT_IDS[0];
+
+function statusOf(value, key){
+  const t = THRESHOLDS[key];
+  if (value >= t.danger) return { label: "BAHAYA", cls: "danger" };
+  if (value >= t.warning) return { label: "WASPADA", cls: "warning" };
+  return { label: "BAIK", cls: "normal" };
+}
+
+// Status keseluruhan alat = status TERBURUK dari semua parameter (suhu, kelembapan, gas)
+function overallStatusOf(unit){
+  const keys = ["suhu", "kelembapan", "gas"];
+  const statuses = keys.map(k => statusOf(unit.data[k], k));
+
+  if (statuses.some(s => s.cls === "danger")) return { label: "BAHAYA", cls: "danger", icon: "🚨" };
+  if (statuses.some(s => s.cls === "warning")) return { label: "WASPADA", cls: "warning", icon: "⚠️" };
+  return { label: "BAIK", cls: "normal", icon: "✅" };
+}
+
+function renderTabs(){
+  const el = document.getElementById("unitTabs");
+  el.innerHTML = UNITS.map(u => `
+    <div class="tab ${u.id === activeUnitId ? 'active' : ''}" onclick="setActiveUnit(${u.id})">
+      <div class="name">${u.name}</div>
+      <div class="dot-row">
+        <span class="dot ${u.online ? 'online' : 'offline'}"></span>
+        ${u.online ? 'Online' : 'Offline'}
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderGrid(){
+  const unit = UNITS.find(u => u.id === activeUnitId);
+  const el = document.getElementById("sensorGrid");
+
+  const cards = [
+    { key: "suhu",       label: "Suhu",             suffix: "°C",  cls: "suhu" },
+    { key: "kelembapan", label: "Kelembapan",       suffix: "%RH", cls: "kelembapan" },
+    { key: "gas",        label: "Gas (Kualitas Udara)", suffix: "ppm (MQ135)", cls: "gas" },
+  ];
+
+  el.innerHTML = cards.map(c => {
+    const value = unit.data[c.key];
+    const st = statusOf(value, c.key);
+    return `
+      <div class="card ${c.cls}">
+        <div class="label">${c.label}</div>
+        <div class="value">${value}</div>
+        <div class="unit">${c.suffix}</div>
+        <span class="badge ${st.cls}">${st.label}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderOverallStatus(){
+  const unit = UNITS.find(u => u.id === activeUnitId);
+  const st = overallStatusOf(unit);
+  const el = document.getElementById("overallStatus");
+  el.className = `overall-status st-${st.cls}`;
+  document.getElementById("overallStatusLabel").textContent = st.label;
+  document.getElementById("overallStatusIcon").textContent = st.icon;
+}
+
+function renderGlobalStatus(){
+  const anyOnline = UNITS.some(u => u.online);
+  const el = document.getElementById("globalStatus");
+  el.className = anyOnline ? "status-online" : "status-offline";
+  el.textContent = anyOnline ? "● Online" : "● Offline";
+}
+
+function renderLastUpdate(){
+  const unit = UNITS.find(u => u.id === activeUnitId);
+  const el = document.getElementById("lastUpdate");
+  if (!unit.lastSeen){
+    el.textContent = "Belum ada data untuk unit ini";
+  } else {
+    el.textContent = "Update terakhir: " + new Date(unit.lastSeen).toLocaleTimeString("id-ID");
+  }
+}
+
+function setActiveUnit(id){
+  activeUnitId = id;
+  renderTabs();
+  renderGrid();
+  renderLastUpdate();
+  renderOverallStatus();
+  updateCharts();
+}
+
+function renderAll(){
+  renderTabs();
+  renderGrid();
+  renderGlobalStatus();
+  renderLastUpdate();
+  renderOverallStatus();
+  updateCharts();
+}
+
+/* ======================================================
+   2b. GRAFIK REALTIME (CHART.JS)
+   ====================================================== */
+
+function buatChart(canvasId, warna){
+  const ctx = document.getElementById(canvasId).getContext("2d");
+  return new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        borderColor: warna,
+        backgroundColor: warna + "22",
+        tension: 0.3,
+        fill: true,
+        pointRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 5, font: { size: 10 } } },
+        y: { beginAtZero: true }
+      }
+    }
+  });
+}
+
+const chartSuhu = buatChart("chartSuhu", "#ea580c");
+const chartKelembapan = buatChart("chartKelembapan", "#2563eb");
+const chartGas = buatChart("chartGas", "#16a34a");
+
+function updateCharts(){
+  const unit = UNITS.find(u => u.id === activeUnitId);
+
+  chartSuhu.data.labels = unit.history.suhu.labels;
+  chartSuhu.data.datasets[0].data = unit.history.suhu.values;
+  chartSuhu.update("none");
+
+  chartKelembapan.data.labels = unit.history.kelembapan.labels;
+  chartKelembapan.data.datasets[0].data = unit.history.kelembapan.values;
+  chartKelembapan.update("none");
+
+  chartGas.data.labels = unit.history.gas.labels;
+  chartGas.data.datasets[0].data = unit.history.gas.values;
+  chartGas.update("none");
+}
+
+/* ======================================================
+   3. KONEKSI MQTT
+   ====================================================== */
+
+const client = mqtt.connect(MQTT_BROKER_URL, MQTT_OPTIONS);
+
+client.on("connect", () => {
+  console.log("Terhubung ke broker MQTT");
+  UNITS.forEach(u => {
+    Object.values(u.topics).forEach(topic => client.subscribe(topic));
+  });
+});
+
+client.on("message", (topic, message) => {
+  const payload = message.toString();
+
+  UNITS.forEach(u => {
+    Object.entries(u.topics).forEach(([key, t]) => {
+      if (t === topic){
+        u.lastSeen = Date.now();
+        if (key === "status"){
+          u.online = payload.trim().toLowerCase() === "online";
+        } else {
+          u.data[key] = parseFloat(payload) || 0;
+          u.online = true; // ada data masuk = anggap online
+
+          // Simpan ke history untuk grafik (hanya untuk suhu/kelembapan/gas)
+          const jamSekarang = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute:'2-digit', second:'2-digit' });
+          const h = u.history[key];
+          h.labels.push(jamSekarang);
+          h.values.push(u.data[key]);
+
+          if (h.labels.length > MAX_HISTORY_POINTS){
+            h.labels.shift();
+            h.values.shift();
+          }
+        }
+      }
+    });
+  });
+
+  renderAll();
+});
+
+client.on("error", (err) => {
+  console.error("MQTT error:", err);
+});
+
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  UNITS.forEach(u => {
+    if (u.online && u.lastSeen && (now - u.lastSeen > OFFLINE_TIMEOUT_MS)){
+      u.online = false;
+      changed = true;
+    }
+  });
+  if (changed) renderAll();
+}, 5000);
+
+/* ======================================================
+   4. JAM & INIT
+   ====================================================== */
+
+setInterval(() => {
+  document.getElementById("clock").textContent = new Date().toLocaleTimeString("id-ID");
+}, 1000);
+
+renderAll();
+
+/* ======================================================
+   5. PWA: SERVICE WORKER & TOMBOL INSTALL
+   ====================================================== */
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").catch(err => {
+      console.warn("Service worker gagal didaftarkan:", err);
+    });
+  });
+}
+
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById("installBtn");
+
+// Event ini muncul di Android/Chrome kalau syarat PWA terpenuhi
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn.style.display = "inline-block";
+});
+
+installBtn.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  installBtn.style.display = "none";
+});
+
+window.addEventListener("appinstalled", () => {
+  installBtn.style.display = "none";
+});
+</script>
+</body>
+</html>
